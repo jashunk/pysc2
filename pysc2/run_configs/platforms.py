@@ -37,6 +37,10 @@ flags.DEFINE_bool("sc2_dev_build", False,
                   "Use a dev build. Mostly useful for testing by Blizzard.")
 FLAGS = flags.FLAGS
 
+SHOULD_OVERRIDE_EXE = True
+OVERRIDE_PATH = "D:/dev/sc2/branches/SC2.Trunk/bin"
+OVERRIDE_EXE = "Versions/Base00000/SC2_ds_x64.exe"
+
 
 def _read_execute_info(path, parents):
   """Read the ExecuteInfo.txt file and return the base directory."""
@@ -89,6 +93,8 @@ class LocalBase(lib.RunConfig):
     exec_path = os.path.join(
         self.data_dir, "Versions/Base%05d" % version.build_version,
         self._exec_name)
+    if SHOULD_OVERRIDE_EXE:
+      exec_path = os.path.join(OVERRIDE_PATH, OVERRIDE_EXE)
 
     if not os.path.exists(exec_path):
       raise sc_process.SC2LaunchError("No SC2 binary found at: %s" % exec_path)
@@ -122,6 +128,8 @@ class Windows(LocalBase):
     exec_path = (os.environ.get("SC2PATH") or
                  _read_execute_info(os.path.expanduser("~/Documents"), 3) or
                  "C:/Program Files (x86)/StarCraft II")
+    if SHOULD_OVERRIDE_EXE:
+      exec_path = OVERRIDE_PATH
     super(Windows, self).__init__(exec_path, "SC2_x64.exe", "Support64")
 
   @classmethod
