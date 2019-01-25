@@ -78,6 +78,7 @@ flags.DEFINE_bool("save_replay", True, "Whether to save a replay at the end.")
 
 flags.DEFINE_string("map", None, "Name of a map to use.")
 flags.mark_flag_as_required("map")
+flags.DEFINE_bool("observer", False, "Whether to add an observer.")
 
 
 def run_thread(agent_classes, players, map_name, visualize):
@@ -129,6 +130,9 @@ def main(unused_argv):
       agent_classes.append(agent_cls)
       players.append(sc2_env.Agent(sc2_env.Race[FLAGS.agent2_race],
                                    FLAGS.agent2_name or agent_name))
+
+  if FLAGS.observer:
+    players.append(sc2_env.Observer())
 
   threads = []
   for _ in range(FLAGS.parallel - 1):

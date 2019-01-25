@@ -83,7 +83,7 @@ class Agent(collections.namedtuple("Agent", ["race", "name"])):
 
 
 Bot = collections.namedtuple("Bot", ["race", "difficulty"])
-
+Observer = collections.namedtuple("Observer", [])
 
 REALTIME_GAME_LOOP_SECONDS = 1 / 22.4
 EPSILON = 1e-5
@@ -207,23 +207,19 @@ class SC2Env(environment.Base):
         players.append(Bot(Race.random, Difficulty.very_easy))
 
     for p in players:
-      if not isinstance(p, (Agent, Bot)):
+      if not isinstance(p, (Agent, Bot, Observer)):
         raise ValueError(
-            "Expected players to be of type Agent or Bot. Got: %s." % p)
+            "Expected players to be of type Agent, Bot, or Observer. Got: %s." % p)
 
     num_players = len(players)
     self._num_agents = sum(1 for p in players if isinstance(p, Agent))
+    self._num_observers = sum(1 for p in players if isinstance(p, Observer))
     self._players = players
-
-    if not 1 <= num_players <= 2 or not self._num_agents:
-      raise ValueError(
-          "Only 1 or 2 players with at least one agent is "
-          "supported at the moment.")
 
     if save_replay_episodes and not replay_dir:
       raise ValueError("Missing replay_dir")
 
-    if map_inst.players and num_players > map_inst.players:
+    if map_inst.players and (num_players - self._num_observers) > map_inst.players:
       raise ValueError(
           "Map only supports %s players, but trying to join with %s" % (
               map_inst.players, num_players))
@@ -260,12 +256,12 @@ class SC2Env(environment.Base):
       raise ValueError("Please specify agent_interface_format.")
 
     if isinstance(agent_interface_format, AgentInterfaceFormat):
-      agent_interface_format = [agent_interface_format] * self._num_agents
+      agent_interface_format = [agent_interface_format] * (self._num_agents + self._num_observers)
 
-    if len(agent_interface_format) != self._num_agents:
+    if len(agent_interface_format) != (self._num_agents + self._num_observers):
       raise ValueError(
           "The number of entries in agent_interface_format should "
-          "correspond 1-1 with the number of agents.")
+          "correspond 1-1 with the number of agents plus the number of observers.")
 
     interfaces = []
     for i, interface_format in enumerate(agent_interface_format):
@@ -362,9 +358,12 @@ class SC2Env(environment.Base):
       if isinstance(p, Agent):
         create.player_setup.add(type=sc_pb.Participant)
         agent = p
-      else:
+      elif isinstance((p, Bot):
         create.player_setup.add(type=sc_pb.Computer, race=p.race,
                                 difficulty=p.difficulty)
+      else:
+        create.player_setup.add(type=sc_pb.Observer)
+
     if self._random_seed is not None:
       create.random_seed = self._random_seed
     self._controllers[0].create_game(create)
@@ -375,7 +374,7 @@ class SC2Env(environment.Base):
 
   def _launch_mp(self, map_inst, interfaces):
     # Reserve a whole bunch of ports for the weird multiplayer implementation.
-    self._ports = portspicker.pick_unused_ports(self._num_agents * 2)
+    self._ports = portspicker.pick_unused_ports((self._num_agents + self._num_observers + 1) * 2)
     logging.info("Ports used for multiplayer: %s", self._ports)
 
     # Actually launch the game processes.
@@ -402,23 +401,27 @@ class SC2Env(environment.Base):
     for p in self._players:
       if isinstance(p, Agent):
         create.player_setup.add(type=sc_pb.Participant)
-      else:
+      elif isinstance(p, Bot):
         create.player_setup.add(type=sc_pb.Computer, race=p.race,
                                 difficulty=p.difficulty)
+      else:
+        create.player_setup.add(type=sc_pb.Observer)
+
     self._controllers[0].create_game(create)
 
     # Create the join requests.
-    agent_players = (p for p in self._players if isinstance(p, Agent))
+    agent_observer_players = (p for p in self._players if (isinstance(p, Agent) or isinstance(p, Observer)))
     join_reqs = []
-    for agent_index, p in enumerate(agent_players):
-      ports = self._ports[:]
+    ports = self._ports[:]
+    serverGamePort = ports.pop(0)
+    serverBasePort = ports.pop(0)
+    for agent_index, p in enumerate(agent_observer_players):
       join = sc_pb.RequestJoinGame(options=interfaces[agent_index])
       join.shared_port = 0  # unused
-      join.server_ports.game_port = ports.pop(0)
-      join.server_ports.base_port = ports.pop(0)
-      for _ in range(self._num_agents - 1):
-        join.client_ports.add(game_port=ports.pop(0),
-                              base_port=ports.pop(0))
+      join.server_ports.game_port = serverGamePort
+      join.server_ports.base_port = serverBasePort
+      join.client_ports.add(game_port=ports.pop(0),
+                            base_port=ports.pop(0))
 
       join.race = p.race
       join.player_name = p.name

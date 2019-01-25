@@ -79,6 +79,7 @@ flags.DEFINE_string("map", None, "Name of a map to use to play.")
 
 flags.DEFINE_string("map_path", None, "Override the map for this replay.")
 flags.DEFINE_string("replay", None, "Name of a replay to show.")
+flags.DEFINE_string("observer", False, "Whether to add an observer.")
 
 
 def main(unused_argv):
@@ -134,6 +135,8 @@ def main(unused_argv):
     create.player_setup.add(type=sc_pb.Computer,
                             race=sc2_env.Race[FLAGS.bot_race],
                             difficulty=sc2_env.Difficulty[FLAGS.difficulty])
+    if FLAGS.observer:
+      create.player_setup.add(type=sc_pb.Observer)
     join = sc_pb.RequestJoinGame(
         options=interface, race=sc2_env.Race[FLAGS.user_race],
         player_name=FLAGS.user_name)
